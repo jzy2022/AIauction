@@ -1,0 +1,124 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  BIDDER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(BIDDER)
+  displayName  String
+  createdAt    DateTime @default(now())
+
+  // Relations
+  createdSessions AuctionSession[]
+  bids            Bid[]
+  wonOrders       Order[]
+
+  @@map("users")
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  images        String[]
+  startingPrice Float
+  incrementStep Float
+  createdAt     DateTime @default(now())
+
+  // Relations
+  sessions AuctionSession[]
+
+  @@map("products")
+}
+
+enum AuctionStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+model AuctionSession {
+  id                  String        @id @default(cuid())
+  productId           String
+  status              AuctionStatus @default(DRAFT)
+  startTime           DateTime
+  endTimePlanned      DateTime
+  endTimeActual       DateTime?
+  antiSnipeWindowSec  Int           @default(30)
+  antiSnipeExtendSec  Int           @default(30)
+  currentPrice        Float
+  leadingBidId        String?
+  createdById         String
+  createdAt           DateTime      @default(now())
+
+  // Relations
+  product    Product @relation(fields: [productId], references: [id])
+  createdBy  User    @relation(fields: [createdById], references: [id])
+  bids       Bid[]
+  orders     Order[]
+  leadingBid Bid?    @relation("LeadingBid", fields: [leadingBidId], references: [id])
+
+  // Indexes
+  @@index([status])
+  @@index([startTime])
+  @@index([endTimePlanned])
+  @@map("auction_sessions")
+}
+
+model Bid {
+  id        String   @id @default(cuid())
+  sessionId String
+  userId    String
+  amount    Float
+  isLeading Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  session        AuctionSession  @relation(fields: [sessionId], references: [id])
+  user           User            @relation(fields: [userId], references: [id])
+  leadingSessions AuctionSession[] @relation("LeadingBid")
+
+  // Indexes
+  @@index([sessionId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("bids")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  sessionId     String      @unique
+  winnerUserId  String
+  finalPrice    Float
+  status        OrderStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+
+  // Relations
+  session AuctionSession @relation(fields: [sessionId], references: [id])
+  winner  User           @relation(fields: [winnerUserId], references: [id])
+
+  @@map("orders")
+}
